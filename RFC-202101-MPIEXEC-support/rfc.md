@@ -15,8 +15,7 @@ This RFC proposes to add the `mpiexec` support for [MPI](https://github.com/mpi4
 
 ## User Benefit
 
-With this project, Ray users can access a set of readily available collective and send/recv APIs in pure Python, with MPI as the backend, supporting CPU in both Numpy and PyTorch.
-
+With this project, Ray users can use MPI as the collective backend.
 
 ## Design Proposal
 
