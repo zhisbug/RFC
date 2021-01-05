@@ -67,6 +67,16 @@ In `Process WorkerPool::StartProcess`, the `Process` object is instantiated. The
 
 After launching the default workers, these workers are in a group. So we can use collective communication method, `gather`, to collect the pids.
 
+We use the `Accept` and `Connect` methods in MPI to create intre-communicator between workers and GCS. GCS collects the pids and sends pids to raylets as the parameters.
+
+But here comes a problem: how can we sent the pids that are on the same machine as raylet?
+
+When raylet gets the pids of default workers, it doesn't need to start up workers by itself. But in `src/ray/raylet/worker_pool.cc` we still need to maintain the others services that we mentioned above.
+
+#### How to make users be able to call the collective communication methods?
+
+The users are only able to manipulate the worker that is assigned to the task. But not all the workers are assigned to tasks. So when assigning workers to tasks, we need to send message to those workers and create a new communicator by calling [`MPI_Comm_split`](https://www.open-mpi.org/doc/v3.0/man3/MPI_Comm_split.3.php). After that, when users call the collective communication methods, such as `ray.collective.allreduce`, the backend will use the new communicator to call MPI APIs.
+
 
 ### Unsolved Problems
 
