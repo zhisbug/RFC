@@ -3,7 +3,7 @@
 | Status        | Proposed      |
 :-------------- |:---------------------------------------------------- |
 | **Author(s)** | Hao Zhang, Runhui Huang |
-| **Sponsor**   | Ion Stoica, Melih Elibol                 |
+| **Sponsor**   | Ion Stoica                 |
 | **Reviewer**  | |
 | **Updated**   | YYYY-MM-DD                                           |
 
