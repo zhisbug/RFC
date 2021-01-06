@@ -27,15 +27,30 @@ We propose to solve this by using `mpiexec` command to start default workers of 
 
 #### Architecture
 
-The number of default workers on each node depends on the number of CPU cores, so that we can use `mpiexec` to create the sufficient default workers. `mpiexec` can be executed at the same aspect as `Global Control Store`, and create the needed default workers before raylets creation.
+According to the code of ray, we could find that the number of default workers on each node depends on the number of CPU cores. This conclusion can be easily made when looking to the code below:
+```python
+# python/ray/_private/services.py #L1447
+if start_initial_python_workers_for_first_job:
+    command.append("--num_initial_python_workers_for_first_job={}".format(
+        resource_spec.num_cpus))
+```
+```python
+# src/ray/raylet/worker_pool.cc #L501
+for (int i = 0; i < num_initial_python_workers_for_first_job_; i++) {
+    StartWorkerProcess(Language::PYTHON, rpc::WorkerType::WORKER, job_id);
+}
+```
+
+So it is possible for us to use `mpiexec` to create the sufficient default workers. The `mpiexec` command can be executed at the same aspect as `Global Control Store`, and create the needed default workers before raylets created.
 
 The place to execute `mpiexec` is shown below:
 
 <p align="center"><img src="arch.jpg" width=600 /></p>
 
+
 #### Position in code
 
-- The execution of `mpiexec` command can be placed in `python\ray\_private\services.py`. This file launches many services, such as `start_plasma_store`, `start_gcs_server`, `start_raylet`. But the default workers are launched in `src\ray\raylet\worker_pool.cc`
+- The execution of `mpiexec` command can be placed in `python\ray\_private\services.py`. This file launches many services, such as `start_plasma_store`, `start_gcs_server`, `start_raylet`. But the default workers are launched in `src\ray\raylet\worker_pool.cc`.
 - The python command to launch default worker in C file might add extra parameters, i.e., `--code-search-path=`. We need to find out the situation when the python command needs this extra parameter.
 
 ### How to connect the default workers launched by `mpiexec` command?
@@ -68,22 +83,17 @@ In `Process WorkerPool::StartProcess`, the `Process` object is instantiated. The
 
 After launching the default workers, these workers are in a group. So we can use collective communication method, `gather`, to collect the pids.
 
-We use the `Accept` and `Connect` methods in MPI to create intre-communicator between workers and GCS. GCS collects the pids and sends pids to raylets as the parameters.
+We use the `Accept` and `Connect` methods in MPI to create intre-communicator between workers and GCS. GCS collects the pids and sends pids to raylets as the parameters. This means, before the execution of `mpiexec` completed, the start up of raylets are blocked. But the `Accept` method in MPI needs the process is started up by `mpiexec --ompi-server file:ompi-server.txt`. There might be other better ways to collect pids.
 
-But here comes a problem: how can we sent the pids that are on the same machine as raylet?
+When raylet gets the pids of default workers, it doesn't need to start up workers by itself. But in `src/ray/raylet/worker_pool.cc`, we still need to maintain the others services that we mentioned above.
 
-When raylet gets the pids of default workers, it doesn't need to start up workers by itself. But in `src/ray/raylet/worker_pool.cc` we still need to maintain the others services that we mentioned above.
-
-#### How to make users be able to call the collective communication methods?
+### How to make users be able to call the collective communication methods?
 
 The users are only able to manipulate the worker that is assigned to the task. But not all the workers are assigned to tasks. So when assigning workers to tasks, we need to send message to those workers and create a new communicator by calling [`MPI_Comm_split`](https://www.open-mpi.org/doc/v3.0/man3/MPI_Comm_split.3.php). After that, when users call the collective communication methods, such as `ray.collective.allreduce`, the backend will use the new communicator to call MPI APIs.
 
-
 ### Unsolved Problems
 
-...
-
-### Other Considerations
-
-...
+There are several problems we haven't found proper solutions:
+- After collecting the pids, how to send the pids to the raylets on different machines respectively. And how to ensure the recieved pids are on the same machine as raylet?
+- After creating the new communicator for the assigned workers, how can we manipulate this communicator in `ray.collective`.
 
